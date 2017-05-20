@@ -1,0 +1,23 @@
+﻿@model IEnumerable<TumblrTruck.DB.MediaSet>
+
+@{
+    ViewData["Title"] = "Viewer";
+}
+
+<div class="media-set" style="margin-top: 20px;">
+	@foreach(var item in Model)
+	{
+	    <div class="panel panel-default">
+		    <div class="panel-heading">@item.Key</div>
+		    <div class="panel-body">
+			    @foreach(var media in item.Media)
+	            {
+	                <div class="media">
+	                    <a href="@media.Url" target="_blank"><img src="@media.Url" /></a>         
+	                </div>
+	            }
+		    </div>
+
+        </div>
+	}
+</div>
