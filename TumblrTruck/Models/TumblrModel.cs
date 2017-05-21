@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Security.Claims;
+using TumblrTruck.DB;
 
 namespace TumblrTruck.Models
 {
@@ -91,13 +93,53 @@ namespace TumblrTruck.Models
         public bool share_following { get; set; }
         public bool can_be_followed { get; set; }
     }
+    
+    public class BlogObject
+    {
+        public bool ask { get; set; }
+        public bool ask_anon { get; set; }
+        public string ask_page_title { get; set; }
+        public bool can_subscribe { get; set; }
+        public string description { get; set; }
+        public bool is_adult { get; set; }
+        public bool is_nsfw { get; set; }
+        public int likes { get; set; }
+        public string name { get; set; }
+        public int posts { get; set; }
+        public string reply_conditions { get; set; }
+        public bool share_likes { get; set; }
+        public bool subscribed { get; set; }
+        public string title { get; set; }
+        public int total_posts { get; set; }
+        public int updated { get; set; }
+        public string url { get; set; }
+    }
 
     public class TrailPost
     {
         public string id { get; set; }
     }
 
-    public class LikedPost
+    
+
+    public class LikedResponse
+    {
+        public List<PostObject> liked_posts { get; set; }
+        public int liked_count { get; set; }
+    }
+
+    public class LikedJson
+    {
+        public Meta meta { get; set; }
+        public LikedResponse response { get; set; }
+    }
+    
+    
+    #endregion
+    
+    #region reused
+    
+    public class PostObject
     {
         public string type { get; set; }
         public string blog_name { get; set; }
@@ -138,17 +180,26 @@ namespace TumblrTruck.Models
         public List<Photo> photos { get; set; }
         public string photoset_layout { get; set; }
     }
+    
+    #endregion
+    
+    #region post
 
-    public class Response
+    public class PostResponse
     {
-        public List<LikedPost> liked_posts { get; set; }
-        public int liked_count { get; set; }
+        public BlogObject blog { get; set; }
+        
+        public List<PostObject> posts { get; set; }
+        
+        public int total_posts { get; set; }
     }
 
-    public class RootObject
+    public class PostJson
     {
         public Meta meta { get; set; }
-        public Response response { get; set; }
+        
+        public PostResponse response { get; set; }
     }
+    
     #endregion
 }

@@ -5,7 +5,6 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using TumblrTruck.DB;
 using TumblrTruck.Models;
-using Newtonsoft.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
@@ -14,37 +13,35 @@ namespace TumblrTruck
     public class TumblrTruck : IDisposable
     {
         /// <summary>
-        /// 是否顯示 console.write
+        /// config
         /// </summary>
-		private bool showDebugLog = true;
-
-        //static IConfigurationRoot _config { get; set; }
-        private TumblrConfig _config { get; set; }
-
-        
-        /// <summary>
-        /// base tumbrl url
-        /// </summary>
-        private string apiBaseUrl = "https://api.tumblr.com/v2/blog/{0}/likes?api_key={1}";
-
-        //static string authHeader = null;
+        private readonly TumblrConfig _config;
 
         /// <summary>
-        /// Tumblr Context
+        /// client
         /// </summary>
-        private readonly TumblrDbContext _db = null;
+        private readonly TumblrClient _client;
+
+        /// <summary>
+        /// db context
+        /// </summary>
+        private readonly TumblrDbContext _db;
 
 
-        private string filePath;
+        private string _filePath;
         //static List<Blog> tempBlogList = null;
 
         public TumblrTruck(TumblrDbContext db, IOptions<TumblrConfig> config)
         {
             _db = db;
             _config = config.Value;
+            
+            _client = new TumblrClient(_config);
         }
+        
         public void Dispose()
         {
+            
         }
 
         public void Run()
@@ -55,41 +52,12 @@ namespace TumblrTruck
             if (_db == null)
                 throw new ArgumentException("no db context");
 
-            filePath = "";
+            _filePath = "";
 
             Task.Run(async () =>
             {
                 await scanLikedPost();
             }).Wait();
-        }
-
-        /// <summary>
-        /// Https the get JSON
-        /// </summary>
-        /// <returns>The get JSON.</returns>
-        /// <param name="url">URL.</param>
-        private async Task<string> httpGetJSON(string url)
-        {
-            //var uri = new Uri(url);
-
-            using (var client = new HttpClient())
-            {
-                //client.DefaultRequestHeaders.Add("Authorization", authHeader);
-                var response = await client.GetAsync(url);
-                response.EnsureSuccessStatusCode();
-                return await response.Content.ReadAsStringAsync();
-
-                //return stringReulst;
-            }
-
-            //using(var client = new HttpClient())
-            //{
-            //    client.DefaultRequestHeaders.Accept.Clear();
-            //    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            //    client.DefaultRequestHeaders.Add("User-Agent", ".NET Foundation Repository Reporter");
-            //    var stringTask = await client.GetStringAsync(url);
-            //    return stringTask;
-            //}
         }
 
         private string newFileName(string id, string url)
@@ -107,7 +75,7 @@ namespace TumblrTruck
         private async Task scanLikedPost()
         {
             //set url
-            apiBaseUrl = string.Format(apiBaseUrl, _config.Hostname, _config.ApiKey);
+            //apiBaseUrl = string.Format(apiBaseUrl, _config.Hostname, _config.ApiKey);
 
             int totalCount = 0, count = 0, circleCount = 0;
             //liked_timestamp
@@ -120,22 +88,30 @@ namespace TumblrTruck
 
             try
             {
-                #region get last active log
-                var lastActiveLog = _db.LastActiveLog.Where(w => w.Status == 1).FirstOrDefault();
+                #region set active log
+                LastActiveLog lastActiveLog = _db.LastActiveLog.FirstOrDefault(w => w.Status == 1);
                 if (lastActiveLog != null)
                 {
                     //count = failActiveLog.LikedCount;
                     likedTimestamp = lastActiveLog.Timestamp;
-                    _log($"start from last failed {lastActiveLog.Timestamp} ({lastActiveLog.CreateTime.ToString("yyyy/MM/dd HH:mm")})");
+                    _log($"start from last failed {lastActiveLog.Timestamp} at ({lastActiveLog.CreateTime:yyyy/MM/dd HH:mm})");
                 }
                 else
                 {
-                    lastActiveLog = _db.LastActiveLog.OrderByDescending(o => o.Timestamp).FirstOrDefault();
-                    if (lastActiveLog != null)
+                    lastLikedTimestamp = _db.LastActiveLog.OrderByDescending(o => o.Timestamp).FirstOrDefault()?.Timestamp ?? 0;
+                    #region create active log
+                    lastActiveLog = new LastActiveLog
                     {
-                        lastLikedTimestamp = lastActiveLog.Timestamp;
-                        _log($"start from newest log {lastActiveLog.Timestamp} failed at {lastActiveLog.CreateTime.ToString("yyyy/MM/dd HH:mm")}");
-                    }
+                        Timestamp = likedTimestamp,
+                        //LikedCount = totalCount,
+                        Status = 1,
+                        CreateTime = DateTime.UtcNow
+                    };
+                    _db.LastActiveLog.Add(lastActiveLog);
+                    await _db.SaveChangesAsync();
+                    #endregion
+                    
+                    _log("start from newest log");
                 }
                 #endregion
 
@@ -148,28 +124,16 @@ namespace TumblrTruck
 
                     if (likedTimestamp != 0 && likedTimestamp < lastLikedTimestamp)
                     {
-                        _log($"#stop! ");
+                        _log("#reach lastLikedTimestamp stop! ");
                         break;
                     }
 
-                    var apiurl = $"{apiBaseUrl}&before={likedTimestamp}";
-                    _debugLog($"circle: {circleCount}, count: {count}, geturl: {apiurl}");
+                    //var apiurl = $"{apiBaseUrl}&before={likedTimestamp}";
+                    _debugLog($"#circle: {circleCount}, count: {count}");
 
-                    var jsonResult = await httpGetJSON(apiurl);
-                    var likedPosts = JsonConvert.DeserializeObject<RootObject>(jsonResult);
-
-                    //create active log
-                    #region save active log
-                    var activeLog = new LastActiveLog
-                    {
-                        Timestamp = likedTimestamp,
-                        LikedCount = totalCount,
-                        Status = 1,
-                        CreateTime = DateTime.UtcNow
-                    };
-                    _db.LastActiveLog.Add(activeLog);
-                    await _db.SaveChangesAsync();
-                    #endregion
+                    //var jsonResult = await httpGetJSON(apiurl);
+                    //var likedPosts = JsonConvert.DeserializeObject<LikedJson>(jsonResult);
+                    var likedPosts = await _client.GetBlogLikes(before: likedTimestamp);                                    
 
                     if (totalCount == 0)
                     {
@@ -190,7 +154,9 @@ namespace TumblrTruck
                     likedTimestamp = likedPosts.response.liked_posts.Last().liked_timestamp;
 
                     //update active log
-                    activeLog.Status = 2;
+                    lastActiveLog.Timestamp = likedTimestamp;
+                    if (lastActiveLog.LikedCount == 0)
+                        lastActiveLog.LikedCount = totalCount;
                     await _db.SaveChangesAsync();
 
                     //if (lastActiveLog != null && likedTimestamp <= lastActiveLog.LastTimestamp)
@@ -201,20 +167,9 @@ namespace TumblrTruck
                 } while (totalCount >= count);
                 #endregion
 
-                // #region create active log
-                // if (lastLikedTimestamp != 0)
-                // {
-                // 	//create ActiveLog
-                // 	_db.LastActiveLog.Add(new LastActiveLog
-                // 	{
-                // 		Timestamp = lastLikedTimestamp,
-                // 		LikedCount = totalCount,
-                //         Status = 1,
-                // 		CreateTime = DateTime.UtcNow
-                // 	});
-                //     await _db.SaveChangesAsync();
-                // }
-                // #endregion
+                //confirm finish
+                lastActiveLog.Status = 2;
+                await _db.SaveChangesAsync();
 
                 _log("finish");
             }
@@ -296,7 +251,15 @@ namespace TumblrTruck
             }
         }
 
-        private async Task<bool> ReadObject(RootObject root)
+        private long getSourceID(string url)
+        {
+            var uri = new Uri(url);
+            var postid = uri.AbsolutePath.Split('/')[2];
+            
+            return Convert.ToInt64(postid);
+        }
+
+        private async Task<bool> ReadObject(LikedJson root)
         {
             if (root == null || root.meta.status != 200 || root.response == null || root.response.liked_posts.Count == 0)
             {
@@ -308,8 +271,9 @@ namespace TumblrTruck
             foreach (var item in root.response.liked_posts)
             {
                 #region get or create MediaSet
+
                 MediaSet dbMediaSet = null;
-                MediaSetFlag createFlat = MediaSetFlag.NoData;
+                MediaSetFlag createFlat;
 
                 if (item.type == "photo")
                     createFlat = createMediaPhoto(item, ref dbMediaSet);
@@ -318,6 +282,16 @@ namespace TumblrTruck
                 else
                     continue;
 
+                if (dbMediaSet != null)
+                {
+                    var sourceUrl = (item.source_title != item.blog_name && !string.IsNullOrEmpty(item.source_url) && item.source_url.Split('/').Length >= 5)
+                        ? item.source_url
+                        : item.post_url;
+                    
+                    dbMediaSet.SourceUrl = sourceUrl;             
+                    dbMediaSet.SourceID = getSourceID(sourceUrl);                                
+                }
+
                 switch (createFlat)
                 {
                     case MediaSetFlag.Create:
@@ -325,7 +299,7 @@ namespace TumblrTruck
                         await _db.SaveChangesAsync();
                         break;
                     case MediaSetFlag.Exists:
-                        _debugLog($"media> {dbMediaSet.Key}:{(MediaType)dbMediaSet.Type} already exists");
+                        _debugLog($"media> {((MediaType)dbMediaSet.Type).ToString().ToLower()} {dbMediaSet.Key} already exists");
                         break;
                     case MediaSetFlag.NoData:
                         _debugLog($"media> post:{item.id} no data!!");
@@ -334,10 +308,10 @@ namespace TumblrTruck
                 #endregion
 
                 //get media set id
-                Guid _mediaSetID = dbMediaSet.ID;
+                Guid mediaSetId = dbMediaSet.ID;
 
                 #region scan posts & related
-                var _type = getPostType(item.type);
+                var postType = getPostType(item.type);
 
 
                 var dbpost = await _db.Post.FindAsync(item.id);
@@ -350,8 +324,8 @@ namespace TumblrTruck
                         Slug = item.slug,
                         Timestamp = item.timestamp,
                         CreateTime = DateTime.UtcNow,
-                        Type = _type,
-                        MediaSetID = _mediaSetID
+                        Type = postType,
+                        MediaSetID = mediaSetId
                     };
 
                     if (!string.IsNullOrEmpty(item.source_url))
@@ -382,22 +356,22 @@ namespace TumblrTruck
                     if (postId == dbpost.ID)
                         continue;
 
-                    if (!_db.Post.Any(a => a.ID == postId))
+                    if (_db.Post.Any(a => a.ID == postId)) 
+                        continue;
+                    
+                    var newtpost = new Post
                     {
-                        var newtpost = new Post
-                        {
-                            ID = postId,
-                            BlogName = trail.blog.name,
-                            //Slug
-                            //Timestamp
-                            CreateTime = DateTime.UtcNow,
-                            Type = _type,
-                            MediaSetID = _mediaSetID,
-                            Content = trail.content_raw
-                        };
+                        ID = postId,
+                        BlogName = trail.blog.name,
+                        //Slug
+                        //Timestamp
+                        CreateTime = DateTime.UtcNow,
+                        Type = postType,
+                        MediaSetID = mediaSetId,
+                        Content = trail.content_raw
+                    };
 
-                        _db.Post.Add(newtpost);
-                    }
+                    _db.Post.Add(newtpost);
                 }
 
                 await _db.SaveChangesAsync();
@@ -410,8 +384,9 @@ namespace TumblrTruck
         /// <summary>
         /// Reads the media photo.
         /// </summary>
-        /// <param name="item">Item.</param>
-        private MediaSetFlag createMediaPhoto(LikedPost item, ref MediaSet dbMediaSet)
+        /// <param name="item">post</param>
+        /// <param name="dbMediaSet">db model</param>
+        private MediaSetFlag createMediaPhoto(PostObject item, ref MediaSet dbMediaSet)
         {
             if (item.photos.Count == 0)
                 return MediaSetFlag.NoData;
@@ -429,6 +404,7 @@ namespace TumblrTruck
                     Type = getPostType(item.type),
                     Layout = item.photoset_layout
                 };
+
             }
             else
                 return MediaSetFlag.Exists;
@@ -453,8 +429,9 @@ namespace TumblrTruck
         /// <summary>
         /// Reads the media video.
         /// </summary>
-        /// <param name="item">LikedPost</param>
-        private MediaSetFlag createMediaVideo(LikedPost item, ref MediaSet dbMediaSet)
+        /// <param name="item">post</param>
+        /// <param name="dbMediaSet">db model</param>
+        private MediaSetFlag createMediaVideo(PostObject item, ref MediaSet dbMediaSet)
         {
             if (item.video_type == "unknow" && string.IsNullOrEmpty(item.video_url))
             {
@@ -508,7 +485,7 @@ namespace TumblrTruck
         private async Task<bool> _download(string url)
         {
             var filename = getFileName(url);
-            var savepath = Path.Combine(filePath, filename);
+            var savepath = Path.Combine(_filePath, filename);
 
             var client = new HttpClient();
             var response = await client.GetAsync(url);
@@ -522,7 +499,6 @@ namespace TumblrTruck
             }
         }
 
-        ///
         private Blog getDBBlog(string blogName)
         {
             var dbBlog = _db.Blog.SingleOrDefault(s => s.Name == blogName);
@@ -546,7 +522,7 @@ namespace TumblrTruck
         /// <param name="msg">Message.</param>
         private void _debugLog(string msg)
         {
-            if (showDebugLog)
+            if (_config.ShowDebugLog)
                 Console.WriteLine(msg);
         }
 

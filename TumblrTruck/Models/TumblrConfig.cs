@@ -9,5 +9,7 @@ namespace TumblrTruck.Models
         public string ApiKey { get; set; }
 
         public string Hostname { get; set; }
-    }
+
+        public bool ShowDebugLog { get; set; }
+}
 }

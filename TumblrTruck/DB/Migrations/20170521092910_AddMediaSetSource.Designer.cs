@@ -8,9 +8,10 @@ using TumblrTruck.DB;
 namespace TumblrTruck.DB.Migrations
 {
     [DbContext(typeof(TumblrDbContext))]
-    partial class TumblrContextModelSnapshot : ModelSnapshot
+    [Migration("20170521092910_AddMediaSetSource")]
+    partial class AddMediaSetSource
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
             modelBuilder
                 .HasAnnotation("ProductVersion", "1.1.2");

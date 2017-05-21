@@ -10,20 +10,20 @@ namespace TumblrViewer.Controllers
 {
     public class ViewerController : Controller
     {
-        private readonly TumblrDbContext context;
+        private readonly TumblrDbContext db;
 
-        public ViewerController(TumblrDbContext context)
+        public ViewerController(TumblrDbContext db)
         {
-            this.context = context;
+            this.db = db;
         }
 
         // GET: /<controller>/
         public IActionResult Index()
         {
-            var list = context.MediaSet
-                              .Include(i => i.Media)
-                              .Include(i => i.Posts)
-                              .OrderBy(o => o.Key).Take(10);
+            var list = db.MediaSet
+                      .Include(i => i.Media)
+                      .Include(i => i.Posts)
+                      .OrderBy(o1 => o1.Posts.OrderBy(o => o.ID).First().ID).Take(10); 
             
             return View(list);
         }

@@ -124,26 +124,15 @@ namespace TumblrTruck.DB
             Media = new HashSet<Media>();
         }
 
-        //public MediaSet(byte type)
-        //{
-        //    Type = type;
-        //    Media = new HashSet<Media>();
-        //}
-
-        //public MediaSet(byte type, string key, Guid? id = null)
-        //{
-        //    Type = type;
-        //    Key = key;
-        //    ID = id.HasValue ? id.Value : Guid.NewGuid();
-        //    Media = new HashSet<Media>();
-        //}
-
         /// <summary>
         /// from fileName url path
         /// </summary>
         /// <returns></returns>
         public Guid ID { get; set; }
 
+        /// <summary>
+        /// media set key
+        /// </summary>
         [MaxLength(50)]
         public string Key { get; set; }
 
@@ -153,14 +142,36 @@ namespace TumblrTruck.DB
         /// <returns></returns>
         public byte Type { get; set; }
 
+        /// <summary>
+        /// layout
+        /// </summary>
         [MaxLength(50)]
         public string Layout { get; set; }
 
+        /// <summary>
+        /// cover
+        /// </summary>
         [MaxLength(200)]
         public string Cover { get; set; }
 
+        /// <summary>
+        /// post.source_url
+        /// </summary>
+        public string SourceUrl { get; set; }
+        
+        /// <summary>
+        /// source post id
+        /// </summary>
+        public long SourceID { get; set; }
+        
+        /// <summary>
+        /// post list
+        /// </summary>
         public ICollection<Post> Posts { get; set; }
 
+        /// <summary>
+        /// media list
+        /// </summary>
         public ICollection<Media> Media { get; set; }
     }
 
